@@ -86,7 +86,7 @@ def transform_new_data():
     Apply all transformations for each row in the .csv file before saving it into database
     """
     reader= pd.read_csv(raw_path,encoding='latin1')
-    # print(reader)
+    # print(reader.head(3))
     print(raw_path)
     # Initialize an empty list for our PprRawAll objects
     ppr_raw_objects = []
@@ -95,7 +95,7 @@ def transform_new_data():
 
     """
     new_date_of_sale = pd.to_datetime(reader['date_of_sale'],format='%d/%m/%Y').dt.strftime('%Y-%m-%d')
-    # print(new_date_of_sale)
+    # print(new_date_of_sale.head(5))
 
     """
     Return price as integer by removing:
@@ -104,7 +104,26 @@ def transform_new_data():
     """
 
     updated_price = reader['price'].replace('[^\d.]', '', regex=True).astype(float).astype(int)
-    print(updated_price)
+    # print(updated_price.head(5))
+
+    
+    """
+    Concat Transformed Series to dataframe and delete pre existing columns
+    """
+
+    reader.drop('date_of_sale', axis=1, inplace=True)
+    print(reader.drop('price',axis =1,inplace=True))
+    # print(reader)
+
+    new_added_sales_date =pd.concat([reader,new_date_of_sale],axis=1)
+    # print(new_added_sales_date)
+
+    price_added = pd.concat([new_added_sales_date,updated_price],axis=1)
+    print(price_added.head(3))
+
+    # Rename Headers
+    # reader.rename(columns={'date_of_sale': 'new_updated_sale_date'}, inplace=True)
+
 
     # for row in reader:
     #         # Apply transformations and save as PprRawAll object
@@ -124,10 +143,10 @@ def transform_new_data():
 transform_new_data()
 
 
-def main():
-    print("[Transform] Start")
-    print("[Transform] Remove any old data from ppr_raw_all table")
-    truncate_table()
-    print("[Transform] Transform new data available in ppr_raw_all table")
-    transform_new_data()
-    print("[Transform] End")
+# def main():
+    # print("[Transform] Start")
+    # print("[Transform] Remove any old data from ppr_raw_all table")
+    # truncate_table()
+    # print("[Transform] Transform new data available in ppr_raw_all table")
+    # transform_new_data()
+    # print("[Transform] End")
