@@ -3,7 +3,7 @@ import os
 import sys
 from datetime import datetime
 from turtle import update
-
+import pandas as pd
 from sqlalchemy import text
 
 # from common.base import session
@@ -81,30 +81,47 @@ def truncate_table():
     # session.commit()
 
 
-# def transform_new_data():
-#     """
-#     Apply all transformations for each row in the .csv file before saving it into database
-#     """
-#     with open(raw_path, mode="r") as csv_file:
-#         # Read the new .csv snapshot ready to be processed
-#         reader = csv.DictReader(csv_file)
-#         # Initialize an empty list for our PprRawAll objects
-#         ppr_raw_objects = []
-#         for row in reader:
-#             # Apply transformations and save as PprRawAll object
-#             ppr_raw_objects.append(
-#                 PprRawAll(
-#                     date_of_sale=update_date_of_sale(row["date_of_sale"]),
-#                     address=transform_case(row["address"]),
-#                     postal_code=transform_case(row["postal_code"]),
-#                     county=transform_case(row["county"]),
-#                     price=update_price(row["price"]),
-#                     description=update_description(row["description"]),
-#                 )
-#             )
-#         # Bulk save all new processed objects and commit
-#         session.bulk_save_objects(ppr_raw_objects)
-#         session.commit()
+def transform_new_data():
+    """
+    Apply all transformations for each row in the .csv file before saving it into database
+    """
+    reader= pd.read_csv(raw_path,encoding='latin1')
+    # print(reader)
+    print(raw_path)
+    # Initialize an empty list for our PprRawAll objects
+    ppr_raw_objects = []
+    """
+    Transform Date of sales
+
+    """
+    new_date_of_sale = pd.to_datetime(reader['date_of_sale'],format='%d/%m/%Y').dt.strftime('%Y-%m-%d')
+    # print(new_date_of_sale)
+
+    """
+    Return price as integer by removing:
+    - "€" symbol
+    - "," to convert the number into float first (e.g. from "€100,000.00" to "100000.00")
+    """
+
+    updated_price = reader['price'].replace('[^\d.]', '', regex=True).astype(float).astype(int)
+    print(updated_price)
+
+    # for row in reader:
+    #         # Apply transformations and save as PprRawAll object
+    #         ppr_raw_objects.append(
+    #             PprRawAll(
+    #                 date_of_sale=update_date_of_sale(row["date_of_sale"]),
+    #                 address=transform_case(row["address"]),
+    #                 postal_code=transform_case(row["postal_code"]),
+    #                 county=transform_case(row["county"]),
+    #                 price=update_price(row["price"]),
+    #                 description=update_description(row["description"]),
+    #             )
+    #         )
+        # Bulk save all new processed objects and commit
+        # session.bulk_save_objects(ppr_raw_objects)
+        # session.commit()
+transform_new_data()
 
 
 def main():
@@ -112,5 +129,5 @@ def main():
     print("[Transform] Remove any old data from ppr_raw_all table")
     truncate_table()
     print("[Transform] Transform new data available in ppr_raw_all table")
-    # transform_new_data()
+    transform_new_data()
     print("[Transform] End")
