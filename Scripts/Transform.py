@@ -3,12 +3,16 @@ import os
 import sys
 from datetime import datetime
 from turtle import update
+from marshmallow_sqlalchemy import column2field
 import pandas as pd
 from sqlalchemy import text
+import psycopg2
+from sqlalchemy import create_engine
 
 # from common.base import session
 # from common
 import common
+from tables import Column
 # from common.tables import PprRawAll
 # from scripts.extracts import raw_path
 
@@ -82,71 +86,109 @@ def truncate_table():
 
 
 def transform_new_data():
-    """
-    Apply all transformations for each row in the .csv file before saving it into database
-    """
-    reader= pd.read_csv(raw_path,encoding='latin1')
-    # print(reader.head(3))
-    print(raw_path)
-    # Initialize an empty list for our PprRawAll objects
-    ppr_raw_objects = []
-    """
-    Transform Date of sales
+    try:
+        print('Connecting to the PostgreSQL database...')
+        conn = psycopg2.connect(
+                    host="qfa-dlp-pre-prod-postgresql-fra-do-user-13185867-0.b.db.ondigitalocean.com",
+                    database="qfa_db",
+                    user="doadmin",
+                    password="AVNS_GeCGRs_qkQt-JHiY12N",
+                    port=25060)
 
-    """
-    new_date_of_sale = pd.to_datetime(reader['date_of_sale'],format='%d/%m/%Y').dt.strftime('%Y-%m-%d')
-    # print(new_date_of_sale.head(5))
+        cur = conn.cursor()   
+        
+        """
+        Apply all transformations for each row in the .csv file before saving it into database
+        """
+        reader= pd.read_csv(raw_path,encoding='latin1')
+        # print(reader.head(3))
+        # print(raw_path)
+        # Initialize an empty list for our PprRawAll objects
+        ppr_raw_objects = []
+        """
+        Transform Date of sales
 
-    """
-    Return price as integer by removing:
-    - "€" symbol
-    - "," to convert the number into float first (e.g. from "€100,000.00" to "100000.00")
-    """
+        """
+        new_date_of_sale = pd.to_datetime(reader['date_of_sale'],format='%d/%m/%Y').dt.strftime('%Y-%m-%d')
+        # print(new_date_of_sale.head(5))
 
-    updated_price = reader['price'].replace('[^\d.]', '', regex=True).astype(float).astype(int)
-    # print(updated_price.head(5))
+        """
+        Return price as integer by removing:
+        - "€" symbol
+        - "," to convert the number into float first (e.g. from "€100,000.00" to "100000.00")
+        """
 
-    
-    """
-    Concat Transformed Series to dataframe and delete pre existing columns
-    """
+        updated_price = reader['price'].replace('[^\d.]', '', regex=True).astype(float).astype(int)
+        # print(updated_price.head(5))
 
-    reader.drop('date_of_sale', axis=1, inplace=True)
-    print(reader.drop('price',axis =1,inplace=True))
-    # print(reader)
+        
+        """
+        Concat Transformed Series to dataframe and delete pre existing columns
+        """
 
-    new_added_sales_date =pd.concat([reader,new_date_of_sale],axis=1)
-    # print(new_added_sales_date)
+        reader.drop('date_of_sale', axis=1, inplace=True)
+        print(reader.drop('price',axis =1,inplace=True))
+        # print(reader)
 
-    price_added = pd.concat([new_added_sales_date,updated_price],axis=1)
-    print(price_added.head(3))
+        new_added_sales_date =pd.concat([reader,new_date_of_sale],axis=1)
+        # print(new_added_sales_date)
 
-    # Rename Headers
-    # reader.rename(columns={'date_of_sale': 'new_updated_sale_date'}, inplace=True)
+        price_added = pd.concat([new_added_sales_date,updated_price],axis=1)
+        #
+
+        # Rename Headers
+        price_added.rename(columns={'date_of_sale': 'new_updated_sale_date'}, inplace=True)
+        price_added.rename(columns={'price': 'new_price'}, inplace=True)
+        
+        # print(price_added.head(3))
+
+         # Create a SQLAlchemy engine for easier DataFrame to PostgreSQL loading
+        engine = create_engine('postgresql://doadmin:AVNS_GeCGRs_qkQt-JHiY12N@qfa-dlp-pre-prod-postgresql-fra-do-user-13185867-0.b.db.ondigitalocean.com:25060/qfa_db')
+        # print(engine)
 
 
-    # for row in reader:
-    #         # Apply transformations and save as PprRawAll object
-    #         ppr_raw_objects.append(
-    #             PprRawAll(
-    #                 date_of_sale=update_date_of_sale(row["date_of_sale"]),
-    #                 address=transform_case(row["address"]),
-    #                 postal_code=transform_case(row["postal_code"]),
-    #                 county=transform_case(row["county"]),
-    #                 price=update_price(row["price"]),
-    #                 description=update_description(row["description"]),
-    #             )
-    #         )
-        # Bulk save all new processed objects and commit
-        # session.bulk_save_objects(ppr_raw_objects)
-        # session.commit()
+        table_name = 'ETL_Table'
+        column_mapping = {
+            'id':'Id',
+            'address': 'Address',
+            'postal_code': 'Postal_Code',
+            'county': 'Country',
+            'description': 'Description',
+            'new_updated_sale_date': 'Date',
+            'new_price': 'Price'
+        }
+        print(column_mapping)
+        price_added = price_added.rename(columns=column_mapping)
+        print(price_added.head(1))
+
+        if f"SQL Query:{price_added.to_sql(table_name,engine, if_exists='append',index = False,method='multi',chunksize=5)}":
+            print(f"Data loaded successfully:{price_added.head(4)}")
+        # else:
+        #     print(f"Table Does not exist...")
+            
+        # #     print(f"DataFrame after insertion:")
+        #     response = pd.read_sql(f"SELECT * FROM {table_name}", engine)
+        #     # print(response)
+        #     if response == None:
+        #         print(f"Dataframe not found in database....")
+        #     else:
+        #         print(f"Dataframe Found in Database...")
+            # Commit changes to the database
+            # conn.commit()
+
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(error)
+        print('Database connection closed.')
 transform_new_data()
 
 
-# def main():
-    # print("[Transform] Start")
-    # print("[Transform] Remove any old data from ppr_raw_all table")
-    # truncate_table()
-    # print("[Transform] Transform new data available in ppr_raw_all table")
-    # transform_new_data()
-    # print("[Transform] End")
+def main():
+    print("[Transform] Start")
+    print("[Transform] Remove any old data from ppr_raw_all table")
+    truncate_table()
+    print("[Transform] Transform new data available in ppr_raw_all table")
+    transform_new_data()
+    print("[Transform] End")
+# main()
+
+
